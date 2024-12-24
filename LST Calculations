@@ -1,0 +1,62 @@
+// Define the region of interest (Pakistan)
+var pakistan = ee.FeatureCollection('FAO/GAUL/2015/level0')
+                  .filter(ee.Filter.eq('ADM0_NAME', 'Pakistan'));
+
+// Date range
+var startDate = '2022-01-01';
+var endDate = '2024-11-30';
+
+// Load MODIS LST dataset (MOD11A2, 8-day composites)
+var modisLST = ee.ImageCollection('MODIS/006/MOD11A2')
+                .filterDate(startDate, endDate)
+                .filterBounds(pakistan)
+                .map(function(image) {
+                  // Convert LST from Kelvin to Celsius
+                  var lst = image.select('LST_Day_1km')
+                                 .multiply(0.02) // Apply scale factor
+                                 .subtract(273.15); // Convert to Celsius
+                  return lst.set('system:time_start', image.get('system:time_start'));
+                });
+
+// Calculate the mean LST for the given period
+var meanLST = modisLST.mean().clip(pakistan);
+
+// Print debug information
+print('Mean LST Image:', meanLST);
+
+// Visualization parameters
+var lstVisParams = {
+  min: 10, // Minimum temperature for visualization
+  max: 50, // Maximum temperature for visualization
+  palette: ['blue', 'cyan', 'green', 'yellow', 'red'] // Gradient for visualization
+};
+
+// Add the mean LST to the map
+Map.centerObject(pakistan, 6); // Center the map on Pakistan
+Map.addLayer(meanLST, lstVisParams, 'Mean LST (Jan-Nov 2024)');
+
+// Add a legend to the map
+function addLegend() {
+  var legend = ui.Panel({style: {position: 'bottom-left'}});
+  var legendTitle = ui.Label({
+    value: 'Land Surface Temperature (°C)',
+    style: {fontWeight: 'bold', fontSize: '14px', margin: '0 0 4px 0', padding: '0'}
+  });
+  legend.add(legendTitle);
+
+  var palette = lstVisParams.palette;
+  var labels = ['10°C', '20°C', '30°C', '40°C', '50°C'];
+
+  var makeRow = function(color, label) {
+    var colorBox = ui.Label('', {backgroundColor: color, padding: '8px', margin: '0'});
+    var description = ui.Label(label, {margin: '0 0 0 6px'});
+    return ui.Panel([colorBox, description], ui.Panel.Layout.Flow('horizontal'));
+  };
+
+  for (var i = 0; i < palette.length; i++) {
+    legend.add(makeRow(palette[i], labels[i]));
+  }
+
+  Map.add(legend);
+}
+addLegend();
